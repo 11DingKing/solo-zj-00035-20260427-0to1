@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { ReactNode } from 'react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 

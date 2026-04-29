@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
@@ -96,18 +96,19 @@ const menuItems: MenuItem[] = [
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isHydrated, setIsHydrated] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, isAuthenticated, restoreFromLocalStorage } =
+  const { user, logout, _hasHydrated, restoreFromLocalStorage } =
     useAuthStore();
 
+  // 在客户端挂载时，尝试从 localStorage 恢复状态（作为 Zustand persist 的备用）
   useEffect(() => {
-    restoreFromLocalStorage();
-    setIsHydrated(true);
-  }, [restoreFromLocalStorage]);
+    if (!_hasHydrated) {
+      restoreFromLocalStorage();
+    }
+  }, [_hasHydrated, restoreFromLocalStorage]);
 
-  const getRoleLabel = (role: UserRole): string => {
+  const getRoleLabel = useCallback((role: UserRole): string => {
     const roleMap: Record<UserRole, string> = {
       [UserRole.ADMIN]: "系统管理员",
       [UserRole.WAREHOUSE_MANAGER]: "仓库管理员",
@@ -115,144 +116,162 @@ export default function Layout({ children }: LayoutProps) {
       [UserRole.FINANCE]: "财务",
     };
     return roleMap[role];
-  };
+  }, []);
 
-  const hasAccess = (roles?: UserRole[]): boolean => {
-    if (!roles || roles.length === 0) return true;
-    if (!isHydrated) return true; // 未 hydration 时显示所有菜单
-    if (!user) {
-      return false;
-    }
-    if (user.role === UserRole.ADMIN) return true;
-    return roles.includes(user.role);
-  };
+  const hasAccess = useCallback(
+    (roles?: UserRole[]): boolean => {
+      // 没有角色限制，所有人都可以访问
+      if (!roles || roles.length === 0) return true;
 
-  const handleLogout = () => {
+      // 未完成 hydration，显示所有菜单
+      if (!_hasHydrated) return true;
+
+      // 已登录但没有用户信息？
+      if (!user) return false;
+
+      // 管理员可以访问所有
+      if (user.role === UserRole.ADMIN) return true;
+
+      // 检查角色权限
+      return roles.includes(user.role);
+    },
+    [_hasHydrated, user],
+  );
+
+  const handleLogout = useCallback(() => {
     logout();
     router.push("/login");
-  };
+  }, [logout, router]);
 
   const visibleMenuItems = menuItems.filter((item) => hasAccess(item.roles));
 
-  if (!isHydrated) {
+  const getCurrentPageLabel = (): string => {
+    const item = visibleMenuItems.find(
+      (m) => pathname === m.href || pathname.startsWith(m.href + "/"),
+    );
+    return item?.label || "首页";
+  };
+
+  // 等待 hydration 完成
+  if (!_hasHydrated) {
     return (
-      <html lang="zh-CN">
-        <body className="min-h-screen bg-gray-100">
-          <GlobalLoading />
-          <div className="min-h-screen flex items-center justify-center">
-            <div className="text-gray-500 text-lg">加载中...</div>
+      <>
+        <GlobalLoading />
+        <ToastContainer />
+        <div className="min-h-screen flex items-center justify-center bg-gray-100">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <div className="text-gray-500 text-lg mt-4">加载中...</div>
           </div>
-        </body>
-      </html>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <>
       <GlobalLoading />
       <ToastContainer />
 
-      <div className="flex h-screen overflow-hidden">
-        {/* Sidebar */}
-        <div
-          className={`bg-white shadow-lg transition-all duration-300 ${
-            sidebarOpen ? "w-64" : "w-20"
-          } flex flex-col`}
-        >
-          {/* Logo */}
-          <div className="h-16 flex items-center justify-center border-b border-gray-200">
-            {sidebarOpen ? (
-              <h1 className="text-xl font-bold text-blue-600">
-                进销存管理系统
-              </h1>
-            ) : (
-              <span className="text-2xl">📦</span>
-            )}
-          </div>
-
-          {/* Menu Items */}
-          <nav className="flex-1 overflow-y-auto py-4 px-3">
-            <ul className="space-y-2">
-              {visibleMenuItems.map((item) => (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
-                      pathname === item.href ||
-                      pathname.startsWith(item.href + "/")
-                        ? "bg-blue-50 text-blue-600"
-                        : "text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    <span className="text-xl">{item.icon}</span>
-                    {sidebarOpen && (
-                      <span className="ml-3 text-sm font-medium">
-                        {item.label}
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-
-          {/* Toggle Button */}
-          <div className="p-3 border-t border-gray-200">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="w-full flex items-center justify-center px-4 py-2 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
-            >
+      <div className="min-h-screen bg-gray-100">
+        <div className="flex h-screen overflow-hidden">
+          {/* Sidebar */}
+          <div
+            className={`bg-white shadow-lg transition-all duration-300 ${
+              sidebarOpen ? "w-64" : "w-20"
+            } flex flex-col`}
+          >
+            {/* Logo */}
+            <div className="h-16 flex items-center justify-center border-b border-gray-200">
               {sidebarOpen ? (
-                <>
-                  <span className="text-xl">◀</span>
-                  <span className="ml-2 text-sm">收起侧边栏</span>
-                </>
+                <h1 className="text-xl font-bold text-blue-600">
+                  进销存管理系统
+                </h1>
               ) : (
-                <span className="text-xl">▶</span>
+                <span className="text-2xl">📦</span>
               )}
-            </button>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
-          <header className="h-16 bg-white shadow-sm border-b border-gray-200 flex items-center justify-between px-6">
-            <div className="flex items-center">
-              <h2 className="text-lg font-semibold text-gray-800">
-                {visibleMenuItems.find(
-                  (item) =>
-                    pathname === item.href ||
-                    pathname.startsWith(item.href + "/"),
-                )?.label || "首页"}
-              </h2>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-800">
-                  {user?.name || "用户"}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {user?.role ? getRoleLabel(user.role) : ""}
-                </p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-medium">
-                {user?.name?.charAt(0) || "U"}
-              </div>
+            {/* Menu Items */}
+            <nav className="flex-1 overflow-y-auto py-4 px-3">
+              <ul className="space-y-2">
+                {visibleMenuItems.map((item) => (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
+                        pathname === item.href ||
+                        pathname.startsWith(item.href + "/")
+                          ? "bg-blue-50 text-blue-600"
+                          : "text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className="text-xl">{item.icon}</span>
+                      {sidebarOpen && (
+                        <span className="ml-3 text-sm font-medium">
+                          {item.label}
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
+            {/* Toggle Button */}
+            <div className="p-3 border-t border-gray-200">
               <button
-                onClick={handleLogout}
-                className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="w-full flex items-center justify-center px-4 py-2 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                退出登录
+                {sidebarOpen ? (
+                  <>
+                    <span className="text-xl">◀</span>
+                    <span className="ml-2 text-sm">收起侧边栏</span>
+                  </>
+                ) : (
+                  <span className="text-xl">▶</span>
+                )}
               </button>
             </div>
-          </header>
+          </div>
 
-          {/* Page Content */}
-          <main className="flex-1 overflow-auto p-6">{children}</main>
+          {/* Main Content */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Header */}
+            <header className="h-16 bg-white shadow-sm border-b border-gray-200 flex items-center justify-between px-6">
+              <div className="flex items-center">
+                <h2 className="text-lg font-semibold text-gray-800">
+                  {getCurrentPageLabel()}
+                </h2>
+              </div>
+
+              <div className="flex items-center space-x-4">
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-800">
+                    {user?.name || "用户"}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {user?.role ? getRoleLabel(user.role) : ""}
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-medium">
+                  {user?.name?.charAt(0) || "U"}
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  退出登录
+                </button>
+              </div>
+            </header>
+
+            {/* Page Content */}
+            <main className="flex-1 overflow-auto p-6">{children}</main>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
