@@ -158,12 +158,12 @@ export default function SalesOrdersPage() {
     if (field === 'productId') {
       const product = products.find((p) => p.id === value);
       if (product) {
-        newItems[index] = { ...newItems[index], [field]: value, unitPrice: product.sellingPrice };
+        newItems[index] = { ...newItems[index], [field]: value, unitPrice: product.sellingPrice } as typeof newItems[number];
       } else {
-        newItems[index] = { ...newItems[index], [field]: value };
+        newItems[index] = { ...newItems[index], [field]: value } as typeof newItems[number];
       }
     } else {
-      newItems[index] = { ...newItems[index], [field]: value };
+      newItems[index] = { ...newItems[index], [field]: value } as typeof newItems[number];
     }
     setFormData({ ...formData, items: newItems });
   };

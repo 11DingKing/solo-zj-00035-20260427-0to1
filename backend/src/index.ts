@@ -54,10 +54,14 @@ app.use(
   }
 );
 
+import { seedDatabase } from "./db/seed";
+
 async function startServer() {
   try {
     await AppDataSource.initialize();
     console.log("Database connected successfully");
+
+    await seedDatabase();
 
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);

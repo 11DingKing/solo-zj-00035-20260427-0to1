@@ -6,11 +6,8 @@ import { Supplier } from "../entities/Supplier";
 import { Warehouse } from "../entities/Inventory";
 import * as bcrypt from "bcryptjs";
 
-async function seed() {
+export async function seedDatabase() {
   try {
-    await AppDataSource.initialize();
-    console.log("Database connected");
-
     const userRepository = AppDataSource.getRepository(User);
     const categoryRepository = AppDataSource.getRepository(Category);
     const supplierRepository = AppDataSource.getRepository(Supplier);
@@ -56,7 +53,7 @@ async function seed() {
       ];
 
       await userRepository.save(users);
-      console.log("Users created");
+      console.log("Seed: Users created");
     }
 
     const existingCategories = await categoryRepository.count();
@@ -69,7 +66,7 @@ async function seed() {
       ];
 
       await categoryRepository.save(categories);
-      console.log("Categories created");
+      console.log("Seed: Categories created");
     }
 
     const existingSuppliers = await supplierRepository.count();
@@ -98,7 +95,7 @@ async function seed() {
       ];
 
       await supplierRepository.save(suppliers);
-      console.log("Suppliers created");
+      console.log("Seed: Suppliers created");
     }
 
     const existingWarehouses = await warehouseRepository.count();
@@ -110,15 +107,11 @@ async function seed() {
       ];
 
       await warehouseRepository.save(warehouses);
-      console.log("Warehouses created");
+      console.log("Seed: Warehouses created");
     }
 
     console.log("Seed completed successfully");
   } catch (error) {
     console.error("Seed failed:", error);
-  } finally {
-    await AppDataSource.destroy();
   }
 }
-
-seed();

@@ -11,7 +11,7 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USER || "inventory",
   password: process.env.DB_PASSWORD || "inventory123",
   database: process.env.DB_NAME || "inventory_db",
-  synchronize: process.env.NODE_ENV === "development",
+  synchronize: true,
   logging: process.env.NODE_ENV === "development",
   entities: [__dirname + "/../entities/**/*.{ts,js}"],
   migrations: [__dirname + "/../migrations/**/*.{ts,js}"],

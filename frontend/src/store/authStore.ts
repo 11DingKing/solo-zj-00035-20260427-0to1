@@ -8,20 +8,24 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  _hasHydrated: boolean;
   
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   setUser: (user: User) => void;
   setToken: (token: string) => void;
+  setHasHydrated: (value: boolean) => void;
+  restoreFromLocalStorage: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
       isLoading: false,
+      _hasHydrated: false,
 
       login: async (username: string, password: string) => {
         set({ isLoading: true });
@@ -66,6 +70,30 @@ export const useAuthStore = create<AuthState>()(
       setToken: (token: string) => {
         set({ token });
       },
+
+      setHasHydrated: (value: boolean) => {
+        set({ _hasHydrated: value });
+      },
+
+      restoreFromLocalStorage: () => {
+        if (typeof window !== 'undefined') {
+          const token = localStorage.getItem('token');
+          const userStr = localStorage.getItem('user');
+          
+          if (token && userStr) {
+            try {
+              const user = JSON.parse(userStr);
+              set({
+                token,
+                user,
+                isAuthenticated: true,
+              });
+            } catch (e) {
+              console.error('Failed to parse user from localStorage:', e);
+            }
+          }
+        }
+      },
     }),
     {
       name: 'auth-storage',
@@ -74,6 +102,14 @@ export const useAuthStore = create<AuthState>()(
         token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.error('Error rehydrating auth store:', error);
+        }
+        if (state) {
+          state._hasHydrated = true;
+        }
+      },
     }
   )
 );

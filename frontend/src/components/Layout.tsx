@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
@@ -95,9 +95,15 @@ const menuItems: MenuItem[] = [
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isHydrated, setIsHydrated] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, isAuthenticated } = useAuthStore();
+  const { user, logout, isAuthenticated, restoreFromLocalStorage } = useAuthStore();
+
+  useEffect(() => {
+    restoreFromLocalStorage();
+    setIsHydrated(true);
+  }, [restoreFromLocalStorage]);
 
   const getRoleLabel = (role: UserRole): string => {
     const roleMap: Record<UserRole, string> = {
@@ -111,7 +117,10 @@ export default function Layout({ children }: LayoutProps) {
 
   const hasAccess = (roles?: UserRole[]): boolean => {
     if (!roles || roles.length === 0) return true;
-    if (!user) return false;
+    if (!isHydrated) return true;
+    if (!user) {
+      return false;
+    }
     if (user.role === UserRole.ADMIN) return true;
     return roles.includes(user.role);
   };
@@ -122,6 +131,18 @@ export default function Layout({ children }: LayoutProps) {
   };
 
   const visibleMenuItems = menuItems.filter((item) => hasAccess(item.roles));
+
+  if (!isHydrated) {
+    return (
+      <html lang="zh-CN">
+        <body className="min-h-screen bg-gray-100">
+          <div className="min-h-screen flex items-center justify-center">
+            <div className="text-gray-500 text-lg">加载中...</div>
+          </div>
+        </body>
+      </html>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -194,8 +215,8 @@ export default function Layout({ children }: LayoutProps) {
 
             <div className="flex items-center space-x-4">
               <div className="text-right">
-                <p className="text-sm font-medium text-gray-800">{user?.name}</p>
-                <p className="text-xs text-gray-500">{user?.role && getRoleLabel(user.role)}</p>
+                <p className="text-sm font-medium text-gray-800">{user?.name || '用户'}</p>
+                <p className="text-xs text-gray-500">{user?.role ? getRoleLabel(user.role) : ''}</p>
               </div>
               <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-medium">
                 {user?.name?.charAt(0) || 'U'}
