@@ -38,8 +38,8 @@ router.post(
         return res.status(403).json({ error: "账户已被禁用" });
       }
 
-      const secret = process.env.JWT_SECRET || "your_jwt_secret_key_here_please_change_in_production";
-      const expiresIn = process.env.JWT_EXPIRES_IN || "24h";
+      const secret = (process.env.JWT_SECRET || "your_jwt_secret_key_here_please_change_in_production") as string;
+      const expiresIn = (process.env.JWT_EXPIRES_IN || "24h") as string;
 
       const token = jwt.sign(
         {
@@ -48,7 +48,7 @@ router.post(
           role: user.role,
         },
         secret,
-        { expiresIn }
+        { expiresIn } as jwt.SignOptions
       );
 
       res.json({

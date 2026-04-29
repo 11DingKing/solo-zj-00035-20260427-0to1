@@ -1,7 +1,13 @@
 import { Router, Response } from "express";
 import { AppDataSource } from "../db/data-source";
-import { Inventory, InventoryTransaction, InventoryTransactionType, Warehouse } from "../entities/Inventory";
+import {
+  Inventory,
+  InventoryTransaction,
+  InventoryTransactionType,
+  Warehouse,
+} from "../entities/Inventory";
 import { Product } from "../entities/Product";
+import { User } from "../entities/User";
 import { authenticateJWT, AuthRequest } from "../middleware/auth";
 import { param, validationResult } from "express-validator";
 import { Between } from "typeorm";
@@ -11,7 +17,7 @@ const router = Router();
 router.get("/", authenticateJWT, async (req: AuthRequest, res: Response) => {
   try {
     const { warehouseId, productId, keyword } = req.query;
-    
+
     const inventoryRepository = AppDataSource.getRepository(Inventory);
     const queryBuilder = inventoryRepository
       .createQueryBuilder("inventory")
@@ -19,21 +25,28 @@ router.get("/", authenticateJWT, async (req: AuthRequest, res: Response) => {
       .leftJoinAndSelect("inventory.product", "product");
 
     if (warehouseId) {
-      queryBuilder.andWhere("inventory.warehouseId = :warehouseId", { warehouseId });
+      queryBuilder.andWhere("inventory.warehouseId = :warehouseId", {
+        warehouseId,
+      });
     }
 
     if (productId) {
       queryBuilder.andWhere("inventory.productId = :productId", { productId });
     }
 
-    const inventories = await queryBuilder.orderBy("inventory.updatedAt", "DESC").getMany();
+    const inventories = await queryBuilder
+      .orderBy("inventory.updatedAt", "DESC")
+      .getMany();
 
     if (keyword) {
       const lowerKeyword = (keyword as string).toLowerCase();
-      return res.json(inventories.filter(inv => 
-        inv.product.code.toLowerCase().includes(lowerKeyword) ||
-        inv.product.name.toLowerCase().includes(lowerKeyword)
-      ));
+      return res.json(
+        inventories.filter(
+          (inv) =>
+            inv.product.code.toLowerCase().includes(lowerKeyword) ||
+            inv.product.name.toLowerCase().includes(lowerKeyword),
+        ),
+      );
     }
 
     res.json(inventories);
@@ -43,86 +56,115 @@ router.get("/", authenticateJWT, async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.get("/transactions", authenticateJWT, async (req: AuthRequest, res: Response) => {
-  try {
-    const { warehouseId, productId, type, startDate, endDate, page = 1, pageSize = 20 } = req.query;
-    
-    const transactionRepository = AppDataSource.getRepository(InventoryTransaction);
-    const queryBuilder = transactionRepository
-      .createQueryBuilder("transaction")
-      .leftJoinAndSelect("transaction.warehouse", "warehouse")
-      .leftJoinAndSelect("transaction.product", "product")
-      .leftJoinAndSelect("transaction.operator", "operator");
+router.get(
+  "/transactions",
+  authenticateJWT,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const {
+        warehouseId,
+        productId,
+        type,
+        startDate,
+        endDate,
+        page = 1,
+        pageSize = 20,
+      } = req.query;
 
-    if (warehouseId) {
-      queryBuilder.andWhere("transaction.warehouseId = :warehouseId", { warehouseId });
-    }
+      const transactionRepository =
+        AppDataSource.getRepository(InventoryTransaction);
+      const queryBuilder = transactionRepository
+        .createQueryBuilder("transaction")
+        .leftJoinAndSelect("transaction.warehouse", "warehouse")
+        .leftJoinAndSelect("transaction.product", "product")
+        .leftJoinAndSelect("transaction.operator", "operator");
 
-    if (productId) {
-      queryBuilder.andWhere("transaction.productId = :productId", { productId });
-    }
+      if (warehouseId) {
+        queryBuilder.andWhere("transaction.warehouseId = :warehouseId", {
+          warehouseId,
+        });
+      }
 
-    if (type) {
-      queryBuilder.andWhere("transaction.type = :type", { type });
-    }
+      if (productId) {
+        queryBuilder.andWhere("transaction.productId = :productId", {
+          productId,
+        });
+      }
 
-    if (startDate && endDate) {
-      queryBuilder.andWhere("transaction.createdAt BETWEEN :startDate AND :endDate", {
-        startDate: new Date(startDate as string),
-        endDate: new Date(endDate as string),
+      if (type) {
+        queryBuilder.andWhere("transaction.type = :type", { type });
+      }
+
+      if (startDate && endDate) {
+        queryBuilder.andWhere(
+          "transaction.createdAt BETWEEN :startDate AND :endDate",
+          {
+            startDate: new Date(startDate as string),
+            endDate: new Date(endDate as string),
+          },
+        );
+      }
+
+      const total = await queryBuilder.getCount();
+      const transactions = await queryBuilder
+        .orderBy("transaction.createdAt", "DESC")
+        .skip((parseInt(page as string) - 1) * parseInt(pageSize as string))
+        .take(parseInt(pageSize as string))
+        .getMany();
+
+      res.json({
+        data: transactions,
+        total,
+        page: parseInt(page as string),
+        pageSize: parseInt(pageSize as string),
       });
+    } catch (error) {
+      console.error("Get inventory transactions error:", error);
+      res.status(500).json({ error: "获取库存流水失败" });
     }
+  },
+);
 
-    const total = await queryBuilder.getCount();
-    const transactions = await queryBuilder
-      .orderBy("transaction.createdAt", "DESC")
-      .skip((parseInt(page as string) - 1) * parseInt(pageSize as string))
-      .take(parseInt(pageSize as string))
-      .getMany();
+router.get(
+  "/:warehouseId/:productId",
+  authenticateJWT,
+  [
+    param("warehouseId").isUUID().withMessage("无效的仓库ID"),
+    param("productId").isUUID().withMessage("无效的商品ID"),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
 
-    res.json({
-      data: transactions,
-      total,
-      page: parseInt(page as string),
-      pageSize: parseInt(pageSize as string),
-    });
-  } catch (error) {
-    console.error("Get inventory transactions error:", error);
-    res.status(500).json({ error: "获取库存流水失败" });
-  }
-});
+      const { warehouseId, productId } = req.params;
 
-router.get("/:warehouseId/:productId", authenticateJWT, [
-  param("warehouseId").isUUID().withMessage("无效的仓库ID"),
-  param("productId").isUUID().withMessage("无效的商品ID"),
-], async (req: AuthRequest, res: Response) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      const inventoryRepository = AppDataSource.getRepository(Inventory);
+      const inventory = await inventoryRepository.findOne({
+        where: {
+          warehouse: { id: warehouseId },
+          product: { id: productId },
+        },
+        relations: ["warehouse", "product"],
+      });
+
+      if (!inventory) {
+        return res.json({
+          quantity: 0,
+          warehouse: { id: warehouseId },
+          product: { id: productId },
+        });
+      }
+
+      res.json(inventory);
+    } catch (error) {
+      console.error("Get inventory error:", error);
+      res.status(500).json({ error: "获取库存信息失败" });
     }
-
-    const { warehouseId, productId } = req.params;
-
-    const inventoryRepository = AppDataSource.getRepository(Inventory);
-    const inventory = await inventoryRepository.findOne({
-      where: { 
-        warehouse: { id: warehouseId },
-        product: { id: productId }
-      },
-      relations: ["warehouse", "product"],
-    });
-
-    if (!inventory) {
-      return res.json({ quantity: 0, warehouse: { id: warehouseId }, product: { id: productId } });
-    }
-
-    res.json(inventory);
-  } catch (error) {
-    console.error("Get inventory error:", error);
-    res.status(500).json({ error: "获取库存信息失败" });
-  }
-});
+  },
+);
 
 export const updateInventory = async (
   warehouseId: string,
@@ -132,10 +174,11 @@ export const updateInventory = async (
   operatorId: string,
   referenceId?: string,
   referenceType?: string,
-  remark?: string
+  remark?: string,
 ): Promise<number> => {
   const inventoryRepository = AppDataSource.getRepository(Inventory);
-  const transactionRepository = AppDataSource.getRepository(InventoryTransaction);
+  const transactionRepository =
+    AppDataSource.getRepository(InventoryTransaction);
   const warehouseRepository = AppDataSource.getRepository(Warehouse);
   const productRepository = AppDataSource.getRepository(Product);
 
@@ -150,21 +193,26 @@ export const updateInventory = async (
   }
 
   let inventory = await inventoryRepository.findOne({
-    where: { 
+    where: {
       warehouse: { id: warehouseId },
-      product: { id: productId }
+      product: { id: productId },
     },
   });
 
   const beforeQuantity = inventory ? inventory.quantity : 0;
   let afterQuantity: number;
 
-  if (transactionType === InventoryTransactionType.PURCHASE_IN || transactionType === InventoryTransactionType.TRANSFER_IN) {
+  if (
+    transactionType === InventoryTransactionType.PURCHASE_IN ||
+    transactionType === InventoryTransactionType.TRANSFER_IN
+  ) {
     afterQuantity = beforeQuantity + quantity;
   } else {
     afterQuantity = beforeQuantity - quantity;
     if (afterQuantity < 0) {
-      throw new Error(`库存不足，当前库存: ${beforeQuantity}, 需要: ${quantity}`);
+      throw new Error(
+        `库存不足，当前库存: ${beforeQuantity}, 需要: ${quantity}`,
+      );
     }
   }
 
@@ -180,8 +228,12 @@ export const updateInventory = async (
 
   await inventoryRepository.save(inventory);
 
-  const userRepository = AppDataSource.getRepository("User");
+  const userRepository = AppDataSource.getRepository(User);
   const operator = await userRepository.findOneBy({ id: operatorId });
+
+  if (!operator) {
+    throw new Error("操作员不存在");
+  }
 
   const transaction = transactionRepository.create({
     warehouse,
