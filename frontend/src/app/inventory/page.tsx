@@ -1,46 +1,81 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import api from '@/lib/api';
 import { Inventory, Warehouse, Product, PaginatedResponse } from '@/types';
+import { useUiStore } from '@/store/uiStore';
+import { useDebounce } from '@/utils/debounce';
 
 export default function InventoryPage() {
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
+  const [warehousesLoaded, setWarehousesLoaded] = useState(false);
+  
+  // 本地输入状态，用于防抖
+  const [localFilters, setLocalFilters] = useState({
     warehouseId: '',
     productName: '',
     lowStock: false,
   });
 
-  useEffect(() => {
-    fetchData();
-  }, [filters]);
+  // 防抖：500ms 后才更新用于搜索的 filters
+  const debouncedProductName = useDebounce(localFilters.productName, 500);
+  
+  const { showGlobalLoading, hideGlobalLoading, showError } = useUiStore();
 
-  const fetchData = async () => {
+  // 仓库列表只加载一次
+  useEffect(() => {
+    fetchWarehouses();
+  }, []);
+
+  // 当防抖后的搜索条件改变时，或者仓库ID/低库存选项改变时，触发搜索
+  useEffect(() => {
+    // 只有当仓库加载完成后才开始搜索库存
+    if (warehousesLoaded) {
+      fetchInventory();
+    }
+  }, [localFilters.warehouseId, localFilters.lowStock, debouncedProductName, warehousesLoaded]);
+
+  const fetchWarehouses = async () => {
+    try {
+      const response = await api.get('/warehouses');
+      setWarehouses(response.data);
+      setWarehousesLoaded(true);
+    } catch (error: any) {
+      console.error('Failed to fetch warehouses:', error);
+      showError(error.response?.data?.error || '获取仓库列表失败');
+      setWarehousesLoaded(true); // 即使失败也标记为已加载
+    }
+  };
+
+  const fetchInventory = useCallback(async () => {
     try {
       setLoading(true);
-      const [inventoryResponse, warehousesResponse] = await Promise.all([
-        api.get('/inventory', { params: { ...filters, pageSize: 100 } }),
-        api.get('/warehouses'),
-      ]);
+      const response = await api.get('/inventory', {
+        params: {
+          warehouseId: localFilters.warehouseId,
+          productName: debouncedProductName,
+          lowStock: localFilters.lowStock,
+          pageSize: 100,
+        },
+      });
 
-      const inventoryData: PaginatedResponse<Inventory> = inventoryResponse.data;
+      const inventoryData: PaginatedResponse<Inventory> = response.data;
       setInventory(inventoryData.data);
-      setWarehouses(warehousesResponse.data);
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
+    } catch (error: any) {
+      console.error('Failed to fetch inventory:', error);
+      showError(error.response?.data?.error || '获取库存数据失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, [localFilters.warehouseId, localFilters.lowStock, debouncedProductName, showError]);
 
   const isLowStock = (item: Inventory): boolean => {
     return item.quantity < item.product.safetyStock;
   };
 
-  if (loading && inventory.length === 0) {
+  if (loading && inventory.length === 0 && !warehousesLoaded) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-gray-500">加载中...</div>
@@ -62,8 +97,8 @@ export default function InventoryPage() {
             <label className="form-label">仓库</label>
             <select
               className="form-select"
-              value={filters.warehouseId}
-              onChange={(e) => setFilters({ ...filters, warehouseId: e.target.value })}
+              value={localFilters.warehouseId}
+              onChange={(e) => setLocalFilters({ ...localFilters, warehouseId: e.target.value })}
             >
               <option value="">全部仓库</option>
               {warehouses.map((wh) => (
@@ -76,9 +111,9 @@ export default function InventoryPage() {
             <input
               type="text"
               className="form-input"
-              placeholder="搜索商品名称"
-              value={filters.productName}
-              onChange={(e) => setFilters({ ...filters, productName: e.target.value })}
+              placeholder="搜索商品名称（输入后自动搜索）"
+              value={localFilters.productName}
+              onChange={(e) => setLocalFilters({ ...localFilters, productName: e.target.value })}
             />
           </div>
           <div className="filter-item">
@@ -87,20 +122,29 @@ export default function InventoryPage() {
               <input
                 type="checkbox"
                 className="w-4 h-4 text-blue-600 rounded"
-                checked={filters.lowStock}
-                onChange={(e) => setFilters({ ...filters, lowStock: e.target.checked })}
+                checked={localFilters.lowStock}
+                onChange={(e) => setLocalFilters({ ...localFilters, lowStock: e.target.checked })}
               />
               <span className="ml-2 text-sm text-gray-700">仅显示低库存</span>
             </label>
           </div>
           <button
-            onClick={fetchData}
+            onClick={fetchInventory}
             className="btn btn-primary"
+            disabled={loading}
           >
-            搜索
+            {loading ? '搜索中...' : '搜索'}
           </button>
         </div>
       </div>
+
+      {/* Loading 提示 */}
+      {loading && inventory.length > 0 && (
+        <div className="text-center py-4 text-blue-600">
+          <span className="inline-block animate-spin mr-2">⟳</span>
+          搜索中...
+        </div>
+      )}
 
       {/* Inventory Table */}
       <div className="card">
@@ -125,7 +169,7 @@ export default function InventoryPage() {
                 {inventory.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="table-cell text-center text-gray-500">
-                      暂无数据
+                      {loading ? '加载中...' : '暂无数据'}
                     </td>
                   </tr>
                 ) : (

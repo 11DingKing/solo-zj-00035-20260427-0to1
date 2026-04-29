@@ -1,10 +1,11 @@
-'use client';
+"use client";
 
-import { ReactNode, useState, useEffect } from 'react';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { useAuthStore } from '@/store/authStore';
-import { UserRole } from '@/types';
+import { ReactNode, useState, useEffect } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/authStore";
+import { UserRole } from "@/types";
+import { GlobalLoading, ToastContainer } from "@/components/UiProviders";
 
 interface LayoutProps {
   children: ReactNode;
@@ -19,76 +20,76 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   {
-    label: '仪表盘',
-    href: '/dashboard',
-    icon: '📊',
+    label: "仪表盘",
+    href: "/dashboard",
+    icon: "📊",
   },
   {
-    label: '商品管理',
-    href: '/products',
-    icon: '📦',
+    label: "商品管理",
+    href: "/products",
+    icon: "📦",
   },
   {
-    label: '分类管理',
-    href: '/categories',
-    icon: '🏷️',
+    label: "分类管理",
+    href: "/categories",
+    icon: "🏷️",
   },
   {
-    label: '供应商管理',
-    href: '/suppliers',
-    icon: '🏢',
+    label: "供应商管理",
+    href: "/suppliers",
+    icon: "🏢",
     roles: [UserRole.PURCHASER, UserRole.FINANCE, UserRole.ADMIN],
   },
   {
-    label: '仓库管理',
-    href: '/warehouses',
-    icon: '🏭',
+    label: "仓库管理",
+    href: "/warehouses",
+    icon: "🏭",
     roles: [UserRole.WAREHOUSE_MANAGER, UserRole.ADMIN],
   },
   {
-    label: '库存查询',
-    href: '/inventory',
-    icon: '📈',
+    label: "库存查询",
+    href: "/inventory",
+    icon: "📈",
   },
   {
-    label: '库存流水',
-    href: '/inventory/transactions',
-    icon: '📋',
+    label: "库存流水",
+    href: "/inventory/transactions",
+    icon: "📋",
   },
   {
-    label: '采购订单',
-    href: '/purchase-orders',
-    icon: '🛒',
+    label: "采购订单",
+    href: "/purchase-orders",
+    icon: "🛒",
     roles: [UserRole.PURCHASER, UserRole.WAREHOUSE_MANAGER, UserRole.ADMIN],
   },
   {
-    label: '销售订单',
-    href: '/sales-orders',
-    icon: '💰',
+    label: "销售订单",
+    href: "/sales-orders",
+    icon: "💰",
     roles: [UserRole.WAREHOUSE_MANAGER, UserRole.ADMIN, UserRole.FINANCE],
   },
   {
-    label: '库存调拨',
-    href: '/transfer-orders',
-    icon: '🔄',
+    label: "库存调拨",
+    href: "/transfer-orders",
+    icon: "🔄",
     roles: [UserRole.WAREHOUSE_MANAGER, UserRole.ADMIN],
   },
   {
-    label: '应付账款',
-    href: '/finance/payables',
-    icon: '💳',
+    label: "应付账款",
+    href: "/finance/payables",
+    icon: "💳",
     roles: [UserRole.FINANCE, UserRole.ADMIN],
   },
   {
-    label: '应收账款',
-    href: '/finance/receivables',
-    icon: '💵',
+    label: "应收账款",
+    href: "/finance/receivables",
+    icon: "💵",
     roles: [UserRole.FINANCE, UserRole.ADMIN],
   },
   {
-    label: '财务汇总',
-    href: '/finance/summary',
-    icon: '📈',
+    label: "财务汇总",
+    href: "/finance/summary",
+    icon: "📈",
     roles: [UserRole.FINANCE, UserRole.ADMIN],
   },
 ];
@@ -98,7 +99,8 @@ export default function Layout({ children }: LayoutProps) {
   const [isHydrated, setIsHydrated] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, isAuthenticated, restoreFromLocalStorage } = useAuthStore();
+  const { user, logout, isAuthenticated, restoreFromLocalStorage } =
+    useAuthStore();
 
   useEffect(() => {
     restoreFromLocalStorage();
@@ -107,17 +109,17 @@ export default function Layout({ children }: LayoutProps) {
 
   const getRoleLabel = (role: UserRole): string => {
     const roleMap: Record<UserRole, string> = {
-      [UserRole.ADMIN]: '系统管理员',
-      [UserRole.WAREHOUSE_MANAGER]: '仓库管理员',
-      [UserRole.PURCHASER]: '采购员',
-      [UserRole.FINANCE]: '财务',
+      [UserRole.ADMIN]: "系统管理员",
+      [UserRole.WAREHOUSE_MANAGER]: "仓库管理员",
+      [UserRole.PURCHASER]: "采购员",
+      [UserRole.FINANCE]: "财务",
     };
     return roleMap[role];
   };
 
   const hasAccess = (roles?: UserRole[]): boolean => {
     if (!roles || roles.length === 0) return true;
-    if (!isHydrated) return true;
+    if (!isHydrated) return true; // 未 hydration 时显示所有菜单
     if (!user) {
       return false;
     }
@@ -127,7 +129,7 @@ export default function Layout({ children }: LayoutProps) {
 
   const handleLogout = () => {
     logout();
-    router.push('/login');
+    router.push("/login");
   };
 
   const visibleMenuItems = menuItems.filter((item) => hasAccess(item.roles));
@@ -136,6 +138,7 @@ export default function Layout({ children }: LayoutProps) {
     return (
       <html lang="zh-CN">
         <body className="min-h-screen bg-gray-100">
+          <GlobalLoading />
           <div className="min-h-screen flex items-center justify-center">
             <div className="text-gray-500 text-lg">加载中...</div>
           </div>
@@ -146,17 +149,22 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      <GlobalLoading />
+      <ToastContainer />
+
       <div className="flex h-screen overflow-hidden">
         {/* Sidebar */}
         <div
           className={`bg-white shadow-lg transition-all duration-300 ${
-            sidebarOpen ? 'w-64' : 'w-20'
+            sidebarOpen ? "w-64" : "w-20"
           } flex flex-col`}
         >
           {/* Logo */}
           <div className="h-16 flex items-center justify-center border-b border-gray-200">
             {sidebarOpen ? (
-              <h1 className="text-xl font-bold text-blue-600">进销存管理系统</h1>
+              <h1 className="text-xl font-bold text-blue-600">
+                进销存管理系统
+              </h1>
             ) : (
               <span className="text-2xl">📦</span>
             )}
@@ -170,14 +178,17 @@ export default function Layout({ children }: LayoutProps) {
                   <Link
                     href={item.href}
                     className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
-                      pathname === item.href || pathname.startsWith(item.href + '/')
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'text-gray-600 hover:bg-gray-50'
+                      pathname === item.href ||
+                      pathname.startsWith(item.href + "/")
+                        ? "bg-blue-50 text-blue-600"
+                        : "text-gray-600 hover:bg-gray-50"
                     }`}
                   >
                     <span className="text-xl">{item.icon}</span>
                     {sidebarOpen && (
-                      <span className="ml-3 text-sm font-medium">{item.label}</span>
+                      <span className="ml-3 text-sm font-medium">
+                        {item.label}
+                      </span>
                     )}
                   </Link>
                 </li>
@@ -209,17 +220,25 @@ export default function Layout({ children }: LayoutProps) {
           <header className="h-16 bg-white shadow-sm border-b border-gray-200 flex items-center justify-between px-6">
             <div className="flex items-center">
               <h2 className="text-lg font-semibold text-gray-800">
-                {visibleMenuItems.find((item) => pathname === item.href || pathname.startsWith(item.href + '/'))?.label || '首页'}
+                {visibleMenuItems.find(
+                  (item) =>
+                    pathname === item.href ||
+                    pathname.startsWith(item.href + "/"),
+                )?.label || "首页"}
               </h2>
             </div>
 
             <div className="flex items-center space-x-4">
               <div className="text-right">
-                <p className="text-sm font-medium text-gray-800">{user?.name || '用户'}</p>
-                <p className="text-xs text-gray-500">{user?.role ? getRoleLabel(user.role) : ''}</p>
+                <p className="text-sm font-medium text-gray-800">
+                  {user?.name || "用户"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {user?.role ? getRoleLabel(user.role) : ""}
+                </p>
               </div>
               <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-medium">
-                {user?.name?.charAt(0) || 'U'}
+                {user?.name?.charAt(0) || "U"}
               </div>
               <button
                 onClick={handleLogout}
@@ -231,9 +250,7 @@ export default function Layout({ children }: LayoutProps) {
           </header>
 
           {/* Page Content */}
-          <main className="flex-1 overflow-auto p-6">
-            {children}
-          </main>
+          <main className="flex-1 overflow-auto p-6">{children}</main>
         </div>
       </div>
     </div>

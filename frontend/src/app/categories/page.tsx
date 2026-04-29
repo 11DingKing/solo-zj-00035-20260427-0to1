@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { Category } from '@/types';
+import { useUiStore } from '@/store/uiStore';
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -14,6 +15,8 @@ export default function CategoriesPage() {
     description: '',
   });
 
+  const { showGlobalLoading, hideGlobalLoading, showSuccess, showError } = useUiStore();
+
   useEffect(() => {
     fetchCategories();
   }, []);
@@ -23,8 +26,9 @@ export default function CategoriesPage() {
       setLoading(true);
       const response = await api.get('/categories');
       setCategories(response.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch categories:', error);
+      showError(error.response?.data?.error || '获取分类列表失败');
     } finally {
       setLoading(false);
     }
@@ -32,18 +36,31 @@ export default function CategoriesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!formData.name.trim()) {
+      showError('分类名称不能为空');
+      return;
+    }
+
     try {
+      showGlobalLoading();
+      
       if (editingCategory) {
         await api.put(`/categories/${editingCategory.id}`, formData);
+        showSuccess('分类更新成功');
       } else {
         await api.post('/categories', formData);
+        showSuccess('分类创建成功');
       }
+      
       setShowModal(false);
       resetForm();
       fetchCategories();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save category:', error);
-      alert('保存失败，请重试');
+      showError(error.response?.data?.error || '保存失败，请重试');
+    } finally {
+      hideGlobalLoading();
     }
   };
 
@@ -58,12 +75,17 @@ export default function CategoriesPage() {
 
   const handleDelete = async (category: Category) => {
     if (!confirm(`确定要删除分类"${category.name}"吗？`)) return;
+    
     try {
+      showGlobalLoading();
       await api.delete(`/categories/${category.id}`);
+      showSuccess('分类删除成功');
       fetchCategories();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to delete category:', error);
-      alert('删除失败，该分类可能已被使用');
+      showError(error.response?.data?.error || '删除失败，该分类可能已被使用');
+    } finally {
+      hideGlobalLoading();
     }
   };
 
@@ -179,6 +201,7 @@ export default function CategoriesPage() {
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="请输入分类名称"
                       required
+                      autoFocus
                     />
                   </div>
                   <div className="form-group">
